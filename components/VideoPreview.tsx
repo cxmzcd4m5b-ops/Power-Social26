@@ -31,6 +31,9 @@ export default function VideoPreview({
   const [progressMessage, setProgressMessage] = useState("");
   const [processingError, setProcessingError] = useState<string | null>(null);
   const [useTrendingMusic, setUseTrendingMusic] = useState(false);
+  const [enableVoiceover, setEnableVoiceover] = useState(false);
+  const [voiceoverIncludeHashtags, setVoiceoverIncludeHashtags] = useState(false);
+  const [voiceGender, setVoiceGender] = useState<"male" | "female">("female");
 
   const platformSpecs = {
     tiktok: { width: 1080, height: 1920, name: "TikTok", duration: 21 },
@@ -160,8 +163,11 @@ export default function VideoPreview({
       if (useTrending) formData.append("trendingMusic", "true");
       formData.append("caption", caption);
       formData.append("hashtags", JSON.stringify(hashtags));
+      formData.append("enableVoiceover", enableVoiceover ? "true" : "false");
+      formData.append("voiceoverIncludeHashtags", voiceoverIncludeHashtags ? "true" : "false");
+      formData.append("voiceGender", voiceGender);
 
-      setProgressMessage(`Processing video with ${useTrending ? 'trending' : 'AI-suggested'} music on server...`);
+      setProgressMessage(`Processing video with ${useTrending ? 'trending' : 'AI-suggested'} music${enableVoiceover ? ' and voiceover' : ''}...`);
       const res = await fetch("/api/process-video-with-music", {
         method: "POST",
         body: formData,
@@ -265,6 +271,62 @@ export default function VideoPreview({
             {processingError}
           </div>
         )}
+        
+        {/* Voiceover Controls */}
+        {!processedVideoUrl && !isProcessing && (
+          <div className="bg-purple-50 border-2 border-purple-200 rounded-lg p-3 space-y-3">
+            <h5 className="text-sm font-bold text-purple-900">🎤 Voiceover Options (Optional)</h5>
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={enableVoiceover}
+                  onChange={(e) => setEnableVoiceover(e.target.checked)}
+                  className="h-4 w-4 rounded border-purple-300 text-purple-600 focus:ring-purple-500"
+                />
+                <span className="text-sm text-purple-900">Add AI voiceover to video</span>
+              </label>
+              {enableVoiceover && (
+                <>
+                  <label className="flex items-center gap-2 cursor-pointer ml-6">
+                    <input
+                      type="checkbox"
+                      checked={voiceoverIncludeHashtags}
+                      onChange={(e) => setVoiceoverIncludeHashtags(e.target.checked)}
+                      className="h-4 w-4 rounded border-purple-300 text-purple-600 focus:ring-purple-500"
+                    />
+                    <span className="text-sm text-purple-900">Include hashtags in voiceover</span>
+                  </label>
+                  <div className="ml-6 flex gap-3">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="voiceGender"
+                        value="female"
+                        checked={voiceGender === "female"}
+                        onChange={(e) => setVoiceGender("female")}
+                        className="h-4 w-4 text-purple-600 focus:ring-purple-500"
+                      />
+                      <span className="text-sm text-purple-900">Female voice</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="voiceGender"
+                        value="male"
+                        checked={voiceGender === "male"}
+                        onChange={(e) => setVoiceGender("male")}
+                        className="h-4 w-4 text-purple-600 focus:ring-purple-500"
+                      />
+                      <span className="text-sm text-purple-900">Male voice</span>
+                    </label>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+        
         {!processedVideoUrl && !isProcessing && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <button

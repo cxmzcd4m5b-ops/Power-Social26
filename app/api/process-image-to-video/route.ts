@@ -15,6 +15,9 @@ export async function POST(request: NextRequest) {
     const caption = formData.get("caption") as string | null;
     const hashtagsRaw = formData.get("hashtags") as string | null;
     const animationType = formData.get("animationType") as string | null;
+    const enableVoiceover = formData.get("enableVoiceover") as string | null;
+    const voiceoverIncludeHashtags = formData.get("voiceoverIncludeHashtags") as string | null;
+    const voiceGender = formData.get("voiceGender") as string | null;
     
     let hashtags: string[] = [];
     if (hashtagsRaw) {
@@ -111,6 +114,27 @@ export async function POST(request: NextRequest) {
     const musicPath = path.join(uploadsDir, `music_${Date.now()}.mp3`);
     await writeFile(musicPath, musicBuffer);
 
+    // Generate TTS if enabled
+    let ttsPath: string | undefined;
+    if (enableVoiceover === "true" && caption) {
+      const ttsText = voiceoverIncludeHashtags === "true" 
+        ? `${caption}. ${hashtags.join(', ')}`
+        : caption;
+      
+      const voice = voiceGender === "male" ? "onyx" : "nova";
+      
+      const ttsResponse = await fetch(`${request.nextUrl.origin}/api/generate-tts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: ttsText, voice }),
+      });
+
+      if (ttsResponse.ok) {
+        const ttsData = await ttsResponse.json();
+        ttsPath = ttsData.audioPath;
+      }
+    }
+
     // Process video with music
     const outputFilename = `${platform}_${Date.now()}.mp4`;
     const outputPath = path.join(generatedDir, outputFilename);
@@ -120,13 +144,14 @@ export async function POST(request: NextRequest) {
       musicPath,
       outputPath,
       platform as "tiktok" | "instagram" | "facebook" | "youtube",
-      { caption: caption ?? undefined, hashtags }
+      { caption: caption ?? undefined, hashtags, ttsPath }
     );
 
     // Cleanup temp files
     await unlink(inputPath).catch(() => {});
     await unlink(tempVideoPath).catch(() => {});
     await unlink(musicPath).catch(() => {});
+    if (ttsPath) await unlink(ttsPath).catch(() => {});
 
     return NextResponse.json({
       success: true,

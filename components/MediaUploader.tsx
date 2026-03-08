@@ -32,8 +32,8 @@ export default function MediaUploader() {
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: {
-      "video/*": [".mp4", ".mov", ".avi", ".mkv"],
-      "image/*": [".jpg", ".jpeg", ".png", ".gif"],
+      "video/*": [".mp4", ".mov"],
+      "image/*": [".jpg", ".jpeg", ".png"],
     },
     multiple: true,
   });

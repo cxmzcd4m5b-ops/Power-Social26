@@ -46,7 +46,7 @@ export default function PlatformDetailModal({
   onCopy,
   copied,
 }: PlatformDetailModalProps) {
-  const [showDemoReel, setShowDemoReel] = useState(false);
+  const [showDemoReel, setShowDemoReel] = useState(true);
   const captionOptions = data.captionVariants?.length
     ? data.captionVariants
     : [data.caption].filter(Boolean);
