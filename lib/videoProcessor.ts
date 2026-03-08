@@ -26,6 +26,14 @@ export interface ImageToVideoOptions {
   animation?: 'static' | 'kenburns' | 'fade';
 }
 
+export interface SlideshowOptions {
+  imagePaths: string[];
+  outputPath: string;
+  platform: 'tiktok' | 'instagram' | 'facebook' | 'youtube';
+  durationPerImage: number;
+  transitionDuration?: number;
+}
+
 const PLATFORM_SPECS = {
   tiktok: {
     width: 1080,
@@ -93,6 +101,94 @@ export class VideoProcessor {
         ]);
 
       command
+        .on('end', () => resolve(outputPath))
+        .on('error', (err: Error) => reject(err))
+        .save(outputPath);
+    });
+  }
+
+  /**
+   * Combine multiple images into a slideshow video with mixed transitions.
+   */
+  static async imagesToSlideshow(options: SlideshowOptions): Promise<string> {
+    const {
+      imagePaths,
+      outputPath,
+      platform,
+      durationPerImage,
+      transitionDuration = 1,
+    } = options;
+    const specs = PLATFORM_SPECS[platform];
+    const n = imagePaths.length;
+
+    if (n === 0) throw new Error('No images provided');
+    if (n === 1) {
+      return this.imageToVideo({
+        imagePath: imagePaths[0],
+        outputPath,
+        duration: durationPerImage,
+        platform,
+        animation: 'kenburns',
+      });
+    }
+
+    const transitions = ['fade', 'slideright', 'slideleft', 'wiperight', 'dissolve'];
+    const pick = (i: number): string => transitions[i % transitions.length];
+
+    return new Promise((resolve, reject) => {
+      const cmd = ffmpeg();
+
+      // Add each image as a looping input
+      for (const img of imagePaths) {
+        cmd.input(img).inputOptions(['-loop 1', `-t ${durationPerImage}`]);
+      }
+
+      // Build the filter graph
+      const filters: string[] = [];
+
+      // Scale each input
+      for (let i = 0; i < n; i++) {
+        filters.push(
+          `[${i}:v]scale=${specs.width}:${specs.height}:force_original_aspect_ratio=increase,crop=${specs.width}:${specs.height},setpts=PTS-STARTPTS,fps=${specs.fps},format=yuv420p[v${i}]`
+        );
+      }
+
+      // Chain xfade transitions
+      if (n === 2) {
+        const offset = durationPerImage - transitionDuration;
+        filters.push(
+          `[v0][v1]xfade=transition=${pick(0)}:duration=${transitionDuration}:offset=${offset}[outv]`
+        );
+      } else {
+        // First transition
+        const offset0 = durationPerImage - transitionDuration;
+        filters.push(
+          `[v0][v1]xfade=transition=${pick(0)}:duration=${transitionDuration}:offset=${offset0}[xf0]`
+        );
+
+        // Middle transitions
+        for (let i = 2; i < n; i++) {
+          const prevLabel = i === 2 ? 'xf0' : `xf${i - 2}`;
+          const accumulatedDuration = durationPerImage + (i - 1) * (durationPerImage - transitionDuration) - transitionDuration;
+          const outLabel = i === n - 1 ? 'outv' : `xf${i - 1}`;
+          filters.push(
+            `[${prevLabel}][v${i}]xfade=transition=${pick(i - 1)}:duration=${transitionDuration}:offset=${accumulatedDuration}[${outLabel}]`
+          );
+        }
+      }
+
+      const totalDuration = n * durationPerImage - (n - 1) * transitionDuration;
+
+      cmd
+        .outputOptions([
+          '-filter_complex', filters.join(';'),
+          '-map', '[outv]',
+          '-t', String(totalDuration),
+          '-c:v', 'libx264',
+          '-preset', 'fast',
+          '-pix_fmt', 'yuv420p',
+          `-r`, String(specs.fps),
+        ])
         .on('end', () => resolve(outputPath))
         .on('error', (err: Error) => reject(err))
         .save(outputPath);
