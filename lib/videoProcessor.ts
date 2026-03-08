@@ -23,6 +23,7 @@ export interface ImageToVideoOptions {
   platform: 'tiktok' | 'instagram' | 'facebook' | 'youtube';
   caption?: string;
   music?: string;
+  animation?: 'static' | 'kenburns' | 'fade';
 }
 
 const PLATFORM_SPECS = {
@@ -58,13 +59,27 @@ const PLATFORM_SPECS = {
 
 export class VideoProcessor {
   /**
-   * Convert image to video with zoom effect
+   * Convert image to video with optional animation effects
    */
   static async imageToVideo(options: ImageToVideoOptions): Promise<string> {
-    const { imagePath, outputPath, duration, platform, caption } = options;
+    const { imagePath, outputPath, duration, platform, caption, animation = 'kenburns' } = options;
     const specs = PLATFORM_SPECS[platform];
 
     return new Promise((resolve, reject) => {
+      let videoFilter: string;
+
+      // Build video filter based on animation type
+      if (animation === 'static') {
+        // Static: no animation, just scale and crop
+        videoFilter = `scale=${specs.width}:${specs.height}:force_original_aspect_ratio=increase,crop=${specs.width}:${specs.height}`;
+      } else if (animation === 'fade') {
+        // Fade: fade in/out effects
+        videoFilter = `scale=${specs.width}:${specs.height}:force_original_aspect_ratio=increase,crop=${specs.width}:${specs.height},fade=t=in:st=0:d=1,fade=t=out:st=${duration - 1}:d=1`;
+      } else {
+        // Ken Burns: zoom effect (default)
+        videoFilter = `scale=${specs.width}:${specs.height}:force_original_aspect_ratio=increase,crop=${specs.width}:${specs.height},zoompan=z='min(zoom+0.0015,1.5)':d=${duration * specs.fps}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${specs.width}x${specs.height}:fps=${specs.fps}`;
+      }
+
       const command = ffmpeg(imagePath)
         .loop(duration)
         .fps(specs.fps)
@@ -73,8 +88,7 @@ export class VideoProcessor {
         .outputOptions([
           '-pix_fmt yuv420p',
           '-t ' + duration,
-          // Ken Burns zoom effect
-          `-vf "scale=${specs.width}:${specs.height}:force_original_aspect_ratio=increase,crop=${specs.width}:${specs.height},zoompan=z='min(zoom+0.0015,1.5)':d=${duration * specs.fps}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${specs.width}x${specs.height}:fps=${specs.fps}"`,
+          `-vf "${videoFilter}"`,
         ]);
 
       command
@@ -147,6 +161,65 @@ export class VideoProcessor {
         .videoCodec('libx264')
         .audioCodec('copy')
         .outputOptions(['-pix_fmt yuv420p', '-preset fast'])
+        .on('end', () => resolve(outputPath))
+        .on('error', (err: Error) => reject(err))
+        .save(outputPath);
+    });
+  }
+
+  /**
+   * Process video: scale/crop to platform size, add music (5 sec past video end), and 5-sec text outro.
+   */
+  static async processVideoWithMusic(
+    inputPath: string,
+    musicPath: string,
+    outputPath: string,
+    platform: 'tiktok' | 'instagram' | 'facebook' | 'youtube',
+    options?: { caption?: string; hashtags?: string[] }
+  ): Promise<string> {
+    const specs = PLATFORM_SPECS[platform];
+    const outroSeconds = 5;
+
+    const metadata = await this.getVideoInfo(inputPath);
+    const videoDuration = metadata?.format?.duration ?? 30;
+    const cappedVideoDuration = Math.min(videoDuration, specs.maxDuration);
+    const totalDuration = cappedVideoDuration + outroSeconds;
+
+    const caption = options?.caption ?? '';
+    const hashtags = options?.hashtags ?? [];
+    const captionLine = (caption || 'Thanks for watching').slice(0, 80);
+    const hashtagLine = hashtags.slice(0, 5).join(' ');
+    const outroLine2 = hashtagLine ? hashtagLine.slice(0, 60) : '';
+    const rawText = outroLine2 ? `${captionLine}\\n${outroLine2}` : captionLine;
+    const escapedText = rawText
+      .replace(/\\/g, '\\\\')
+      .replace(/'/g, "\\'");
+
+    const fontsize = platform === 'tiktok' ? 52 : 44;
+    const drawtext = `drawtext=text='${escapedText}':fontcolor=white:fontsize=${fontsize}:x=(w-text_w)/2:y=(h-text_h)/2:box=1:boxcolor=black@0.6:boxborderw=12`;
+
+    const filterComplex = [
+      `[0:v]scale=${specs.width}:${specs.height}:force_original_aspect_ratio=increase,crop=${specs.width}:${specs.height},trim=duration=${cappedVideoDuration},setpts=PTS-STARTPTS,fps=${specs.fps}[vscaled]`,
+      `color=c=black:s=${specs.width}x${specs.height}:d=${outroSeconds}:r=${specs.fps}[outro]`,
+      `[outro]${drawtext}[outro_text]`,
+      `[vscaled][outro_text]concat=n=2:v=1:a=0[outv]`,
+      `[1:a]atrim=0:${totalDuration},asetpts=PTS-STARTPTS,volume=0.3[a]`,
+    ].join(';');
+
+    return new Promise((resolve, reject) => {
+      ffmpeg()
+        .input(inputPath)
+        .input(musicPath)
+        .outputOptions([
+          '-filter_complex', filterComplex,
+          '-map', '[outv]',
+          '-map', '[a]',
+          '-t', String(totalDuration),
+          '-c:v', 'libx264',
+          '-preset', 'fast',
+          '-pix_fmt', 'yuv420p',
+          '-c:a', 'aac',
+        ])
         .on('end', () => resolve(outputPath))
         .on('error', (err: Error) => reject(err))
         .save(outputPath);

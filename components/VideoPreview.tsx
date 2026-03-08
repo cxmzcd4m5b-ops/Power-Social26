@@ -2,12 +2,10 @@
 
 import { useRef, useEffect, useState } from "react";
 import { Download, Play, Image as ImageIcon, Loader2 } from "lucide-react";
-import { FFmpeg } from "@ffmpeg/ffmpeg";
-import { fetchFile, toBlobURL } from "@ffmpeg/util";
-import { getMusicUrl } from "@/lib/musicLibrary";
 
 interface VideoPreviewProps {
   videoSrc: string;
+  videoFile?: File;
   caption: string;
   platform: "tiktok" | "instagram" | "facebook" | "youtube";
   hashtags: string[];
@@ -16,6 +14,7 @@ interface VideoPreviewProps {
 
 export default function VideoPreview({
   videoSrc,
+  videoFile,
   caption,
   platform,
   hashtags,
@@ -23,14 +22,15 @@ export default function VideoPreview({
 }: VideoPreviewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const ffmpegRef = useRef<FFmpeg | null>(null);
+  const thumbnailVideoRef = useRef<HTMLVideoElement>(null);
   
   const [thumbnailUrl, setThumbnailUrl] = useState<string>("");
   const [processedVideoUrl, setProcessedVideoUrl] = useState<string>("");
   const [isProcessing, setIsProcessing] = useState(false);
-  const [progress, setProgress] = useState(0);
+  const [showTextOverlay, setShowTextOverlay] = useState(true);
   const [progressMessage, setProgressMessage] = useState("");
-  const [isFFmpegLoaded, setIsFFmpegLoaded] = useState(false);
+  const [processingError, setProcessingError] = useState<string | null>(null);
+  const [useTrendingMusic, setUseTrendingMusic] = useState(false);
 
   const platformSpecs = {
     tiktok: { width: 1080, height: 1920, name: "TikTok", duration: 21 },
@@ -41,40 +41,10 @@ export default function VideoPreview({
 
   const spec = platformSpecs[platform];
 
-  // Initialize FFmpeg
-  useEffect(() => {
-    const loadFFmpeg = async () => {
-      try {
-        const ffmpeg = new FFmpeg();
-        ffmpegRef.current = ffmpeg;
-
-        ffmpeg.on("log", ({ message }) => {
-          console.log(message);
-        });
-
-        ffmpeg.on("progress", ({ progress: prog }) => {
-          setProgress(Math.round(prog * 100));
-        });
-
-        const baseURL = "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd";
-        await ffmpeg.load({
-          coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
-          wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm"),
-        });
-
-        setIsFFmpegLoaded(true);
-      } catch (error) {
-        console.error("Failed to load FFmpeg:", error);
-      }
-    };
-
-    loadFFmpeg();
-  }, []);
-
-  // Generate thumbnail from first frame
+  // Generate thumbnail from first frame (use separate hidden video to avoid affecting playback)
   useEffect(() => {
     const generateThumbnail = () => {
-      const video = videoRef.current;
+      const video = thumbnailVideoRef.current;
       const canvas = canvasRef.current;
       if (!video || !canvas) return;
 
@@ -170,79 +140,48 @@ export default function VideoPreview({
     }
   }, [videoSrc, caption, hashtags, platform, spec]);
 
-  // Process video with FFmpeg
-  const processVideo = async () => {
-    if (!ffmpegRef.current || !isFFmpegLoaded) {
-      alert("FFmpeg is still loading. Please wait a moment and try again.");
+  // Process video via server API (avoids client-side FFmpeg FS/memory limits)
+  const processVideo = async (useTrending = false) => {
+    if (!videoFile) {
+      setProcessingError("Video file is required. Please upload a video first.");
       return;
     }
 
     setIsProcessing(true);
-    setProgress(0);
-    setProgressMessage("Loading video...");
+    setUseTrendingMusic(useTrending);
+    setProgressMessage("Uploading and processing...");
+    setProcessingError(null);
 
     try {
-      const ffmpeg = ffmpegRef.current;
+      const formData = new FormData();
+      formData.append("file", videoFile);
+      formData.append("platform", platform);
+      if (musicSuggestion && !useTrending) formData.append("musicSuggestion", musicSuggestion);
+      if (useTrending) formData.append("trendingMusic", "true");
+      formData.append("caption", caption);
+      formData.append("hashtags", JSON.stringify(hashtags));
 
-      // Fetch input video
-      setProgressMessage("Preparing video...");
-      const videoData = await fetchFile(videoSrc);
-      await ffmpeg.writeFile("input.mp4", videoData);
+      setProgressMessage(`Processing video with ${useTrending ? 'trending' : 'AI-suggested'} music on server...`);
+      const res = await fetch("/api/process-video-with-music", {
+        method: "POST",
+        body: formData,
+      });
 
-      // Fetch music
-      setProgressMessage("Adding music...");
-      const musicUrl = await getMusicUrl(musicSuggestion);
-      const musicData = await fetchFile(musicUrl);
-      await ffmpeg.writeFile("music.mp3", musicData);
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Processing failed");
+      }
 
-      // Build FFmpeg command for video processing
-      setProgressMessage("Processing video with captions...");
-      
-      const words = caption.split(" ").slice(0, 10); // Limit to first 10 words
-      const wordDuration = 0.4; // seconds per word
-      
-      // Create animated text overlays
-      let textFilters = words.map((word, index) => {
-        const startTime = index * wordDuration;
-        const endTime = startTime + wordDuration;
-        const fadeTime = 0.2;
-        
-        return `drawtext=text='${word.replace(/'/g, "\\'")}':fontfile=/path/to/font:fontsize=60:fontcolor=white:x=(w-text_w)/2:y=h-200:enable='between(t,${startTime},${endTime})':alpha='if(lt(t,${startTime+fadeTime}),(t-${startTime})/${fadeTime},1)'`;
-      }).join(",");
-
-      // Simplified approach: Add static text and music
-      const outputArgs = [
-        "-i", "input.mp4",
-        "-i", "music.mp3",
-        "-filter_complex",
-        `[0:v]scale=${spec.width}:${spec.height}:force_original_aspect_ratio=increase,crop=${spec.width}:${spec.height},drawtext=text='${caption.slice(0, 50).replace(/'/g, "\\'")}...':fontsize=48:fontcolor=white:x=(w-text_w)/2:y=h-150:box=1:boxcolor=black@0.5:boxborderw=10[v];[1:a]volume=0.3[a1];[0:a][a1]amix=inputs=2:duration=shortest[a]`,
-        "-map", "[v]",
-        "-map", "[a]",
-        "-t", String(spec.duration),
-        "-c:v", "libx264",
-        "-preset", "ultrafast",
-        "-c:a", "aac",
-        "-shortest",
-        "output.mp4"
-      ];
-
-      setProgressMessage("Rendering final video...");
-      await ffmpeg.exec(outputArgs);
-
-      setProgressMessage("Finalizing...");
-      const data = await ffmpeg.readFile("output.mp4");
-      const videoBlob = new Blob([data], { type: "video/mp4" });
-      const url = URL.createObjectURL(videoBlob);
-      
-      setProcessedVideoUrl(url);
+      const videoUrl = `${window.location.origin}${data.videoUrl}`;
+      setProcessedVideoUrl(videoUrl);
       setProgressMessage("Complete!");
-      
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
       console.error("Video processing error:", error);
-      setProgressMessage("Processing failed. Thumbnail still available.");
+      setProcessingError(`Processing failed: ${message}`);
+      setProgressMessage("Processing failed.");
     } finally {
       setIsProcessing(false);
-      setProgress(100);
     }
   };
 
@@ -262,17 +201,105 @@ export default function VideoPreview({
     link.click();
   };
 
+  const isSquare = platform === "facebook";
+
+  const displayVideoSrc = processedVideoUrl || videoSrc;
+
   return (
     <div className="space-y-3">
-      {/* Hidden video element for thumbnail extraction */}
+      {/* Live Reel Preview - shows raw video, then processed video with music in same box */}
+      <div className="space-y-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h5 className="text-sm font-bold text-amber-900">Live Reel Preview</h5>
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-amber-900">
+              <input
+                type="checkbox"
+                checked={showTextOverlay}
+                onChange={(e) => setShowTextOverlay(e.target.checked)}
+                className="h-4 w-4 rounded border-amber-300 text-amber-600 focus:ring-amber-500"
+              />
+              Show text overlay
+            </label>
+            {processedVideoUrl && (
+              <button
+                onClick={downloadVideo}
+                className="flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-1.5 text-sm font-bold text-white hover:bg-green-700"
+              >
+                <Download className="w-4 h-4" />
+                Download
+              </button>
+            )}
+          </div>
+        </div>
+        <div
+          className={`relative w-full max-h-[400px] overflow-hidden rounded-lg shadow-lg border-2 border-gray-200 bg-black ${
+            isSquare ? "aspect-square" : "aspect-[9/16]"
+          }`}
+        >
+          <video
+            ref={videoRef}
+            src={displayVideoSrc}
+            controls
+            playsInline
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+          {/* Overlay - caption and hashtags; toggle works for both raw and processed video */}
+          {showTextOverlay && (
+            <div className="pointer-events-none absolute inset-x-0 top-0 bottom-14 flex flex-col justify-end bg-gradient-to-t from-black/80 via-black/20 to-transparent pb-2 pt-12 px-4">
+              <div className="absolute left-3 top-3 rounded-lg bg-white/20 px-3 py-1.5">
+                <span className="text-sm font-bold text-white">{spec.name}</span>
+              </div>
+              <p className="mb-2 line-clamp-4 text-center text-sm font-bold leading-snug text-white drop-shadow-lg sm:text-base">
+                {caption}
+              </p>
+              <p className="text-center text-xs text-blue-400 drop-shadow-md sm:text-sm">
+                {hashtags.slice(0, 5).join(" ")}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {processingError && (
+          <div className="rounded-lg border-2 border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            {processingError}
+          </div>
+        )}
+        {!processedVideoUrl && !isProcessing && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <button
+              onClick={() => processVideo(false)}
+              disabled={!videoFile}
+              className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-green-600 to-emerald-600 text-white py-3 rounded-lg font-bold hover:from-green-700 hover:to-emerald-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Play className="w-5 h-5" />
+              {videoFile ? "Generate Video with Music" : "Upload a video to enable"}
+            </button>
+            <button
+              onClick={() => processVideo(true)}
+              disabled={!videoFile}
+              className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white py-3 rounded-lg font-bold hover:from-purple-700 hover:to-pink-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Play className="w-5 h-5" />
+              {videoFile ? "Generate with Trending Music" : "Upload a video to enable"}
+            </button>
+          </div>
+        )}
+        {isProcessing && (
+          <div className="bg-amber-50 border-2 border-amber-200 rounded-lg p-3 flex items-center gap-2">
+            <Loader2 className="w-5 h-5 shrink-0 animate-spin text-amber-600" />
+            <span className="text-sm font-medium text-amber-900">{progressMessage}</span>
+          </div>
+        )}
+      </div>
+
+      {/* Hidden video for thumbnail extraction only */}
       <video
-        ref={videoRef}
+        ref={thumbnailVideoRef}
         src={videoSrc}
         className="hidden"
         crossOrigin="anonymous"
       />
-      
-      {/* Hidden canvas for thumbnail generation */}
       <canvas ref={canvasRef} className="hidden" />
 
       {/* Thumbnail Preview */}
@@ -294,56 +321,6 @@ export default function VideoPreview({
           </button>
         </div>
       )}
-
-      {/* Video Processing */}
-      <div className="space-y-2">
-        <h5 className="text-sm font-bold text-amber-900">🎬 Video with Captions & Music</h5>
-        
-        {!processedVideoUrl && !isProcessing && (
-          <button
-            onClick={processVideo}
-            disabled={!isFFmpegLoaded}
-            className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-green-600 to-emerald-600 text-white py-3 rounded-lg font-bold hover:from-green-700 hover:to-emerald-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Play className="w-5 h-5" />
-            {isFFmpegLoaded ? "Generate Video with Music" : "Loading FFmpeg..."}
-          </button>
-        )}
-
-        {isProcessing && (
-          <div className="bg-amber-50 border-2 border-amber-200 rounded-lg p-4 space-y-2">
-            <div className="flex items-center gap-2">
-              <Loader2 className="w-5 h-5 animate-spin text-amber-600" />
-              <span className="text-sm font-medium text-amber-900">{progressMessage}</span>
-            </div>
-            <div className="w-full bg-amber-200 rounded-full h-3">
-              <div
-                className="bg-amber-600 h-3 rounded-full transition-all duration-300"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
-            <p className="text-xs text-amber-700 text-center">{progress}%</p>
-          </div>
-        )}
-
-        {processedVideoUrl && (
-          <div className="space-y-2">
-            <video
-              src={processedVideoUrl}
-              controls
-              className="w-full rounded-lg shadow-lg border-2 border-gray-200"
-              style={{ maxHeight: "400px" }}
-            />
-            <button
-              onClick={downloadVideo}
-              className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-green-600 to-emerald-600 text-white py-3 rounded-lg font-bold hover:from-green-700 hover:to-emerald-700 transition-all"
-            >
-              <Download className="w-5 h-5" />
-              Download {spec.name} Video
-            </button>
-          </div>
-        )}
-      </div>
     </div>
   );
 }

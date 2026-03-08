@@ -18,25 +18,26 @@ async function analyzeMediaWithAI(
   const trendData = await TrendResearcher.getTrendingData('log cabin building');
   const successPatterns = await TrendResearcher.analyzeSuccessfulContent();
 
-  const prompt = `You are a social media expert for Creative Living Cabins, a UK-based premium log cabin company.
+  const prompt = `You are a social media expert for Creative Living Cabins, the UK's premier bespoke log cabin company.
 
-COMPANY INFORMATION - CRITICAL:
-Company Name: Creative Living Cabins
-Location: Surrey, UK (3 display villages)
-Website: www.creativelivingcabins.co.uk
-Specialization: Bespoke, made-to-measure log cabins, garden offices, home offices
-Materials: Sustainable Siberian spruce from harvested forests
-USP: Hand-crafted, bespoke designs, superior basework with plastic post system (5-year guarantee)
-Features: Premium doors & windows, cavity wall insulation, air conditioning options
-Key Differentiators: Free design service, free site surveys, no hard sell approach
+COMPANY DEEP DIVE (from creativelivingcabins.co.uk):
+- **Display villages**: Bagshot, Ripley, Surbiton (Surrey) – visit to see furnished cabins in person
+- **Cabin models** (for reference only – NEVER use these names in captions): Berkshire, Cumbria, Cambridgeshire, Cornwall, Devon, Dorset, Essex, Hampshire, Kent, London, Norfolk, Somerset, Suffolk, Surrey, Sussex, Wiltshire
+- **Bespoke**: FREE design service – draughtsmen help you create your own layout at no extra cost
+- **Materials**: Siberian spruce, interlocking plank system, double tongue-and-grooved wind lock, sustainable forests
+- **Basework**: Recycled plastic posts (won't rot like timber) – 5-year guarantee on cabin, basework, materials & workmanship
+- **Doors & windows**: Toughened glass, insulated panels, 4-point locking, tilt-and-turn – all standard
+- **Uses**: Home offices, garden rooms, studios, family rooms, pool houses, gyms, art studios
+- **Current offer**: SAVE UP TO £2,245 – FREE Cabin Construction or Heating & Air Con (ends 31st March 2026)
+- **No hard sell**: Free site surveys, no pushy salesmen, customer interests first
+- **Customer quotes**: "Excellent quality and value", "Super professional", "What you get for your money is superb"
 
 BRAND REQUIREMENTS:
 ✅ MUST mention "Creative Living Cabins" in EVERY caption
 ✅ MUST include #CreativeLivingCabins in EVERY hashtag list
 ✅ Use @CreativeLivingCabins for platform mentions
-✅ Emphasize UK-based, Surrey locations, premium quality
-✅ Highlight bespoke/custom design capabilities
-✅ Mention sustainable materials when relevant
+✅ Display villages: Bagshot, Ripley, Surbiton (do NOT change these locations)
+✅ FORBIDDEN in captions: Berkshire, Cumbria, Cambridgeshire, Cornwall, Devon, Dorset, Essex, Hampshire, Kent, London, Norfolk, Somerset, Suffolk, Surrey, Sussex, Wiltshire – user adds these via checkbox if needed
 
 Files uploaded: ${fileDescriptions}
 
@@ -52,91 +53,57 @@ REAL TRENDING DATA (March 2026):
 WHAT'S WORKING NOW:
 ${successPatterns.commonElements.join(', ')}
 
-TONE & MESSAGING:
-- Professional but approachable (family-owned feel)
-- Emphasize quality and craftsmanship
-- UK-focused (Surrey display villages)
-- Highlight customer satisfaction (many testimonials)
-- Mention: bespoke design, sustainable materials, superior basework
-- Target: Homeowners wanting garden offices, studios, living spaces
-
-Analyze this Creative Living Cabins content and create engaging social media posts for each platform:
-
-Requirements:
-- **TikTok**: ${trendData.tiktok.optimalLength}s, viral hooks, showcase craftsmanship of Creative Living Cabins
-- **Instagram**: ${trendData.instagram.optimalLength}s, tag @CreativeLivingCabins, beautiful aesthetics, Surrey UK
-- **Facebook**: ${trendData.facebook.optimalLength}s, mention 3 Surrey display villages, free site surveys
-- **YouTube Shorts**: ${trendData.youtube.optimalLength}s, educational, credit Creative Living Cabins
+CAPTION STYLE – MODERN & ENGAGING (NOT plain or outdated):
+- **Scroll-stopping hooks**: "POV:", "Wait for it...", "This is why...", "The moment...", "No extension needed."
+- **Specific over generic**: Uses (home office, pool house), locations (Bagshot, Ripley, Surbiton) – do NOT name cabin models
+- **Numbers & proof**: "5-year guarantee", "FREE design service", "Save up to £2,245"
+- **Emotional triggers**: "Dream cabin", "Game-changer", "Finally", "Worth the wait"
+- **Questions**: "Need a garden office?", "Thinking extension? Think again."
+- **Behind-the-scenes**: Construction moments, craftsmanship close-ups, before/after
+- **Avoid**: Corporate jargon, vague claims, boring intros
 
 For each platform provide:
-1. **Caption**: Viral hook + "Creative Living Cabins" mention + quality/bespoke focus + Surrey/UK context
-2. **Hashtags**: #CreativeLivingCabins FIRST + trending hashtags + #Surrey #UK #BespokeCabins
-3. **Music Suggestions**: Trending tracks
-4. **Video Edit Tips**: Showcase quality, craftsmanship, before/after transformations
-
-Focus on Creative Living Cabins':
-- Bespoke, hand-crafted quality
-- Sustainable Siberian spruce
-- Superior plastic post basework (5yr guarantee)
-- Premium doors & windows
-- Surrey display villages
-- Garden offices & home offices
-- Free design service
-- Customer satisfaction
+1. **Caption**: Punchy hook + Creative Living Cabins + specific detail (location, offer, or use case – no cabin model names)
+2. **CaptionVariants**: 2-3 alternatives with different hooks – mix question, POV, and benefit-led
+3. **Hashtags**: #CreativeLivingCabins FIRST + #LogCabins #GardenOffice #BespokeCabins #Surrey #UK + trending
+4. **Music Suggestions**: Upbeat, inspiring, or satisfying-build vibes
+5. **Video Edit Tips**: Specific to content – e.g. "Before/after reveal", "Plastic post base close-up", "Show construction progress" (no cabin model names)
 
 Return as JSON matching this structure:
 {
   "tiktok": {
-    "caption": "Viral hook + Creative Living Cabins + quality focus + UK context",
-    "hashtags": ["#CreativeLivingCabins", "#UK", "#Surrey", "...trending tags..."],
+    "caption": "Punchy hook + Creative Living Cabins + specific detail",
+    "captionVariants": ["Option 1...", "Option 2...", "Option 3..."],
+    "hashtags": ["#CreativeLivingCabins", "#LogCabins", "#GardenOffice", "...trending..."],
     "musicSuggestions": ["..."],
     "format": "Vertical 9:16, ${trendData.tiktok.optimalLength}s",
-    "videoEdits": ["Showcase quality", "Before/after", "Bespoke details"]
+    "videoEdits": ["Specific tip 1", "Specific tip 2"]
   },
-  "instagram": { 
-    "caption": "@CreativeLivingCabins + craftsmanship story + Surrey location",
-    "hashtags": ["#CreativeLivingCabins", "#Surrey", "#UK", "...trending..."],
-    "musicSuggestions": ["..."],
-    "format": "...",
-    "videoEdits": ["..."]
-  },
-  "facebook": { 
-    "caption": "Creative Living Cabins + community focus + 3 display villages mention",
-    "hashtags": ["#CreativeLivingCabins", "#Surrey", "..."],
-    "musicSuggestions": ["..."],
-    "format": "...",
-    "videoEdits": ["..."]
-  },
-  "youtube": { 
-    "caption": "How Creative Living Cabins builds bespoke log cabins | Surrey UK",
-    "hashtags": ["#CreativeLivingCabins", "#Surrey", "#UK", "..."],
-    "musicSuggestions": ["..."],
-    "format": "...",
-    "videoEdits": ["..."]
-  },
+  "instagram": { "caption": "...", "captionVariants": [...], "hashtags": [...], "musicSuggestions": [...], "format": "...", "videoEdits": [...] },
+  "facebook": { "caption": "...", "captionVariants": [...], "hashtags": [...], "musicSuggestions": [...], "format": "...", "videoEdits": [...] },
+  "youtube": { "caption": "...", "captionVariants": [...], "hashtags": [...], "musicSuggestions": [...], "format": "...", "videoEdits": [...] },
   "analysis": {
-    "scene": "Creative Living Cabins construction/installation",
-    "materials": ["Siberian spruce", "tools", "basework"],
-    "stage": "Construction phase",
+    "scene": "Description of uploaded content",
+    "materials": ["..."],
+    "stage": "Construction/installation phase",
     "keyMoments": ["..."],
     "recommendedDuration": "..."
   }
 }
 
-CRITICAL REQUIREMENTS:
+CRITICAL:
 ✅ "Creative Living Cabins" in every caption
-✅ #CreativeLivingCabins first or second hashtag
-✅ Mention UK/Surrey when natural
-✅ Emphasize bespoke/quality/craftsmanship
-✅ Professional, trustworthy tone
-✅ Include call-to-action (visit display villages, free site survey)`;
+✅ #CreativeLivingCabins first hashtag
+✅ Display villages: Bagshot, Ripley, Surbiton only
+✅ Modern, scroll-stopping captions – NOT plain or corporate
+✅ Reference locations, offers, uses – NOT cabin model names`;
 
   const completion = await openai.chat.completions.create({
     model: "gpt-4o-mini",
     messages: [
       {
         role: "system",
-        content: "You are the social media expert for Creative Living Cabins, a premium UK log cabin company based in Surrey. You create professional, engaging content that showcases their bespoke craftsmanship, sustainable materials, and superior quality. You always include Creative Living Cabins branding and #CreativeLivingCabins. Respond with valid JSON.",
+        content: "You are the social media expert for Creative Living Cabins (creativelivingcabins.co.uk). You create scroll-stopping, modern captions. NEVER use cabin model names (Berkshire, Cumbria, Cambridgeshire, Cornwall, Devon, Dorset, Essex, Hampshire, Kent, London, Norfolk, Somerset, Suffolk, Surrey, Sussex, Wiltshire) in captions—the user adds those via a separate checkbox. Use: punchy hooks, locations (Bagshot/Ripley/Surbiton), uses (home office, pool house), offers (save £2,245, 5-year guarantee). Always include Creative Living Cabins and #CreativeLivingCabins. Respond with valid JSON.",
       },
       {
         role: "user",
@@ -152,7 +119,23 @@ CRITICAL REQUIREMENTS:
     throw new Error("No content generated");
   }
 
-  return JSON.parse(result) as GeneratedContent;
+  const generated = JSON.parse(result) as GeneratedContent;
+
+  // Add best posting times from trend data
+  generated.tiktok.bestPostingTimes = trendData.tiktok.bestPostingTimes;
+  generated.instagram.bestPostingTimes = trendData.instagram.bestPostingTimes;
+  generated.facebook.bestPostingTimes = trendData.facebook.bestPostingTimes;
+  generated.youtube.bestPostingTimes = trendData.youtube.bestPostingTimes;
+
+  // Ensure captionVariants exists (fallback to single caption if AI omits it)
+  for (const platform of ["tiktok", "instagram", "facebook", "youtube"] as const) {
+    const p = generated[platform];
+    if (!p.captionVariants?.length && p.caption) {
+      p.captionVariants = [p.caption];
+    }
+  }
+
+  return generated;
 }
 
 export async function POST(request: NextRequest) {

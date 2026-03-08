@@ -41,7 +41,14 @@ export default function ContentGenerator({ files }: ContentGeneratorProps) {
       const data: GeneratedContent = await response.json();
       setGeneratedContent(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
+      const msg = err instanceof Error ? err.message : "Something went wrong";
+      if (msg === "Failed to fetch") {
+        setError(
+          "Network error. Ensure the dev server is running (npm run dev), OPENAI_API_KEY is set in .env, and try again."
+        );
+      } else {
+        setError(msg);
+      }
     } finally {
       setIsGenerating(false);
     }

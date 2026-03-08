@@ -2,10 +2,12 @@ export type Platform = "tiktok" | "instagram" | "facebook" | "youtube";
 
 export interface PlatformContent {
   caption: string;
+  captionVariants?: string[];
   hashtags: string[];
   musicSuggestions: string[];
   format: string;
   videoEdits?: string[];
+  bestPostingTimes?: string[];
 }
 
 export interface GeneratedContent {
