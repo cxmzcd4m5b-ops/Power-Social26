@@ -211,13 +211,13 @@ export class VideoProcessor {
         `color=c=black:s=${specs.width}x${specs.height}:d=${outroSeconds}:r=${specs.fps}[outro]`,
         `[outro]${drawtext}[outro_text]`,
         `[vscaled][outro_text]concat=n=2:v=1:a=0[outv]`,
-        // TTS audio (trimmed to total duration)
-        `[2:a]atrim=0:${totalDuration},asetpts=PTS-STARTPTS,volume=1.2[tts]`,
-        // Music with ducking: lower volume when TTS is playing
-        `[1:a]atrim=0:${totalDuration},asetpts=PTS-STARTPTS[music_full]`,
-        `[music_full][tts]sidechaincompress=threshold=0.1:ratio=4:attack=200:release=1000,volume=0.5[music_ducked]`,
-        // Mix TTS + ducked music
-        `[music_ducked][tts]amix=inputs=2:duration=longest:weights=1 1.5[a]`,
+        // TTS audio (trimmed and boosted)
+        `[2:a]atrim=0:${totalDuration},asetpts=PTS-STARTPTS,volume=1.3[tts]`,
+        // Music: trim to duration
+        `[1:a]atrim=0:${totalDuration},asetpts=PTS-STARTPTS[music]`,
+        // Duck music when TTS plays, then mix
+        `[music][tts]sidechaincompress=threshold=0.03:ratio=4:attack=200:release=1000[music_ducked]`,
+        `[music_ducked][tts]amix=inputs=2:duration=longest:weights=0.4 1.5[a]`,
       ];
       inputMaps = ['-map', '[outv]', '-map', '[a]'];
     } else {
