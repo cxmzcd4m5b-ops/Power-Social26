@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useEffect, useState } from "react";
-import { Download, Play, Image as ImageIcon, Loader2 } from "lucide-react";
+import { Download, Play, Image as ImageIcon, Loader2, Mic } from "lucide-react";
 
 interface VideoPreviewProps {
   videoSrc: string;
@@ -144,7 +144,7 @@ export default function VideoPreview({
   }, [videoSrc, caption, hashtags, platform, spec]);
 
   // Process video via server API (avoids client-side FFmpeg FS/memory limits)
-  const processVideo = async (useTrending = false) => {
+  const processVideo = async (useTrending = false, voiceoverOnly = false) => {
     if (!videoFile) {
       setProcessingError("Video file is required. Please upload a video first.");
       return;
@@ -159,15 +159,21 @@ export default function VideoPreview({
       const formData = new FormData();
       formData.append("file", videoFile);
       formData.append("platform", platform);
-      if (musicSuggestion && !useTrending) formData.append("musicSuggestion", musicSuggestion);
-      if (useTrending) formData.append("trendingMusic", "true");
+      if (!voiceoverOnly) {
+        if (musicSuggestion && !useTrending) formData.append("musicSuggestion", musicSuggestion);
+        if (useTrending) formData.append("trendingMusic", "true");
+      }
       formData.append("caption", caption);
       formData.append("hashtags", JSON.stringify(hashtags));
-      formData.append("enableVoiceover", enableVoiceover ? "true" : "false");
+      formData.append("enableVoiceover", (enableVoiceover || voiceoverOnly) ? "true" : "false");
       formData.append("voiceoverIncludeHashtags", voiceoverIncludeHashtags ? "true" : "false");
       formData.append("voiceGender", voiceGender);
+      if (voiceoverOnly) formData.append("voiceoverOnly", "true");
 
-      setProgressMessage(`Processing video with ${useTrending ? 'trending' : 'AI-suggested'} music${enableVoiceover ? ' and voiceover' : ''}...`);
+      const label = voiceoverOnly
+        ? "Processing video with voiceover only..."
+        : `Processing video with ${useTrending ? 'trending' : 'AI-suggested'} music${enableVoiceover ? ' and voiceover' : ''}...`;
+      setProgressMessage(label);
       const res = await fetch("/api/process-video-with-music", {
         method: "POST",
         body: formData,
@@ -328,22 +334,30 @@ export default function VideoPreview({
         )}
         
         {!processedVideoUrl && !isProcessing && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <button
               onClick={() => processVideo(false)}
               disabled={!videoFile}
-              className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-green-600 to-emerald-600 text-white py-3 rounded-lg font-bold hover:from-green-700 hover:to-emerald-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-green-600 to-emerald-600 text-white py-3 rounded-lg font-bold hover:from-green-700 hover:to-emerald-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm"
             >
-              <Play className="w-5 h-5" />
-              {videoFile ? "Generate Video with Music" : "Upload a video to enable"}
+              <Play className="w-4 h-4" />
+              Video with Music
             </button>
             <button
               onClick={() => processVideo(true)}
               disabled={!videoFile}
-              className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white py-3 rounded-lg font-bold hover:from-purple-700 hover:to-pink-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white py-3 rounded-lg font-bold hover:from-purple-700 hover:to-pink-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm"
             >
-              <Play className="w-5 h-5" />
-              {videoFile ? "Generate with Trending Music" : "Upload a video to enable"}
+              <Play className="w-4 h-4" />
+              Trending Music
+            </button>
+            <button
+              onClick={() => processVideo(false, true)}
+              disabled={!videoFile}
+              className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-sky-600 to-cyan-600 text-white py-3 rounded-lg font-bold hover:from-sky-700 hover:to-cyan-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+            >
+              <Mic className="w-4 h-4" />
+              Voiceover Only
             </button>
           </div>
         )}

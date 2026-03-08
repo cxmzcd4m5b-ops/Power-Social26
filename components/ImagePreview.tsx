@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useEffect, useState } from "react";
-import { Download, Play, Loader2 } from "lucide-react";
+import { Download, Play, Loader2, Mic } from "lucide-react";
 
 interface ImagePreviewProps {
   imageSrc: string;
@@ -134,8 +134,8 @@ export default function ImagePreview({ imageSrc, imageFile, caption, platform, h
     };
   }, [imageSrc, caption, hashtags, platform, spec]);
 
-  // Process image to video with music via server API
-  const processImage = async (useTrending = false) => {
+  // Process image to video via server API
+  const processImage = async (useTrending = false, voiceoverOnly = false) => {
     if (!imageFile) {
       setProcessingError("Image file is required. Please upload an image first.");
       return;
@@ -149,16 +149,22 @@ export default function ImagePreview({ imageSrc, imageFile, caption, platform, h
       const formData = new FormData();
       formData.append("file", imageFile);
       formData.append("platform", platform);
-      if (musicSuggestion && !useTrending) formData.append("musicSuggestion", musicSuggestion);
-      if (useTrending) formData.append("trendingMusic", "true");
+      if (!voiceoverOnly) {
+        if (musicSuggestion && !useTrending) formData.append("musicSuggestion", musicSuggestion);
+        if (useTrending) formData.append("trendingMusic", "true");
+      }
       formData.append("caption", caption);
       formData.append("hashtags", JSON.stringify(hashtags));
       formData.append("animationType", animationType);
-      formData.append("enableVoiceover", enableVoiceover ? "true" : "false");
+      formData.append("enableVoiceover", (enableVoiceover || voiceoverOnly) ? "true" : "false");
       formData.append("voiceoverIncludeHashtags", voiceoverIncludeHashtags ? "true" : "false");
       formData.append("voiceGender", voiceGender);
+      if (voiceoverOnly) formData.append("voiceoverOnly", "true");
 
-      setProgressMessage(`Processing image with ${useTrending ? 'trending' : 'AI-suggested'} music${enableVoiceover ? ' and voiceover' : ''}...`);
+      const label = voiceoverOnly
+        ? "Processing image with voiceover only..."
+        : `Processing image with ${useTrending ? 'trending' : 'AI-suggested'} music${enableVoiceover ? ' and voiceover' : ''}...`;
+      setProgressMessage(label);
       const res = await fetch("/api/process-image-to-video", {
         method: "POST",
         body: formData,
@@ -329,22 +335,30 @@ export default function ImagePreview({ imageSrc, imageFile, caption, platform, h
           )}
           
           {!processedVideoUrl && !isProcessing && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <button
                 onClick={() => processImage(false)}
                 disabled={!imageFile}
-                className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-green-600 to-emerald-600 text-white py-3 rounded-lg font-bold hover:from-green-700 hover:to-emerald-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-green-600 to-emerald-600 text-white py-3 rounded-lg font-bold hover:from-green-700 hover:to-emerald-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm"
               >
-                <Play className="w-5 h-5" />
-                Generate Video with Music
+                <Play className="w-4 h-4" />
+                Video with Music
               </button>
               <button
                 onClick={() => processImage(true)}
                 disabled={!imageFile}
-                className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white py-3 rounded-lg font-bold hover:from-purple-700 hover:to-pink-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white py-3 rounded-lg font-bold hover:from-purple-700 hover:to-pink-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm"
               >
-                <Play className="w-5 h-5" />
-                Generate with Trending Music
+                <Play className="w-4 h-4" />
+                Trending Music
+              </button>
+              <button
+                onClick={() => processImage(false, true)}
+                disabled={!imageFile}
+                className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-sky-600 to-cyan-600 text-white py-3 rounded-lg font-bold hover:from-sky-700 hover:to-cyan-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+              >
+                <Mic className="w-4 h-4" />
+                Voiceover Only
               </button>
             </div>
           )}

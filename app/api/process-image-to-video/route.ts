@@ -18,6 +18,7 @@ export async function POST(request: NextRequest) {
     const enableVoiceover = formData.get("enableVoiceover") as string | null;
     const voiceoverIncludeHashtags = formData.get("voiceoverIncludeHashtags") as string | null;
     const voiceGender = formData.get("voiceGender") as string | null;
+    const voiceoverOnly = formData.get("voiceoverOnly") as string | null;
     
     let hashtags: string[] = [];
     if (hashtagsRaw) {
@@ -103,60 +104,72 @@ export async function POST(request: NextRequest) {
       animation: (animationType as "static" | "kenburns" | "fade") || "kenburns",
     });
 
-    // Get music URL based on trending flag or AI suggestion
-    let musicUrl: string;
-    if (trendingMusic === "true") {
-      musicUrl = await getTrendingMusicUrl(platform as "tiktok" | "instagram" | "facebook" | "youtube");
-    } else {
-      musicUrl = await getMusicUrl(musicSuggestion || undefined);
-    }
-
-    const fetchHeaders = {
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-      Accept: "audio/mpeg,audio/*,*/*",
-    };
-    let musicResponse = await fetch(musicUrl, { headers: fetchHeaders });
-    
-    // Fallback to first track if primary URL fails
-    if (!musicResponse.ok && (musicSuggestion || trendingMusic)) {
-      const { getAllTracks } = await import("@/lib/musicLibrary");
-      const fallbackUrl = getAllTracks()[0]?.url;
-      if (fallbackUrl && fallbackUrl !== musicUrl) {
-        musicResponse = await fetch(fallbackUrl, { headers: fetchHeaders });
-      }
-    }
-    
-    if (!musicResponse.ok) {
-      await unlink(inputPath).catch(() => {});
-      await unlink(tempVideoPath).catch(() => {});
-      if (ttsPath) await unlink(ttsPath).catch(() => {});
-      return NextResponse.json(
-        { error: `Failed to download music (HTTP ${musicResponse.status})` },
-        { status: 500 }
-      );
-    }
-    
-    const musicBuffer = Buffer.from(await musicResponse.arrayBuffer());
-    const musicPath = path.join(uploadsDir, `music_${Date.now()}.mp3`);
-    await writeFile(musicPath, musicBuffer);
-
-    // Process video with music (and TTS if available)
     const outputFilename = `${platform}_${Date.now()}.mp4`;
     const outputPath = path.join(generatedDir, outputFilename);
 
-    await VideoProcessor.processVideoWithMusic(
-      tempVideoPath,
-      musicPath,
-      outputPath,
-      platform as "tiktok" | "instagram" | "facebook" | "youtube",
-      { caption: caption ?? undefined, hashtags, ttsPath }
-    );
+    if (voiceoverOnly === "true" && ttsPath) {
+      // Voiceover only: no music
+      await VideoProcessor.processVideoWithVoiceover(
+        tempVideoPath,
+        ttsPath,
+        outputPath,
+        platform as "tiktok" | "instagram" | "facebook" | "youtube",
+        { caption: caption ?? undefined, hashtags }
+      );
 
-    // Cleanup temp files
-    await unlink(inputPath).catch(() => {});
-    await unlink(tempVideoPath).catch(() => {});
-    await unlink(musicPath).catch(() => {});
-    if (ttsPath) await unlink(ttsPath).catch(() => {});
+      await unlink(inputPath).catch(() => {});
+      await unlink(tempVideoPath).catch(() => {});
+      await unlink(ttsPath).catch(() => {});
+    } else {
+      // With music (and optionally TTS)
+      let musicUrl: string;
+      if (trendingMusic === "true") {
+        musicUrl = await getTrendingMusicUrl(platform as "tiktok" | "instagram" | "facebook" | "youtube");
+      } else {
+        musicUrl = await getMusicUrl(musicSuggestion || undefined);
+      }
+
+      const fetchHeaders = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        Accept: "audio/mpeg,audio/*,*/*",
+      };
+      let musicResponse = await fetch(musicUrl, { headers: fetchHeaders });
+      
+      if (!musicResponse.ok && (musicSuggestion || trendingMusic)) {
+        const { getAllTracks } = await import("@/lib/musicLibrary");
+        const fallbackUrl = getAllTracks()[0]?.url;
+        if (fallbackUrl && fallbackUrl !== musicUrl) {
+          musicResponse = await fetch(fallbackUrl, { headers: fetchHeaders });
+        }
+      }
+      
+      if (!musicResponse.ok) {
+        await unlink(inputPath).catch(() => {});
+        await unlink(tempVideoPath).catch(() => {});
+        if (ttsPath) await unlink(ttsPath).catch(() => {});
+        return NextResponse.json(
+          { error: `Failed to download music (HTTP ${musicResponse.status})` },
+          { status: 500 }
+        );
+      }
+      
+      const musicBuffer = Buffer.from(await musicResponse.arrayBuffer());
+      const musicPath = path.join(uploadsDir, `music_${Date.now()}.mp3`);
+      await writeFile(musicPath, musicBuffer);
+
+      await VideoProcessor.processVideoWithMusic(
+        tempVideoPath,
+        musicPath,
+        outputPath,
+        platform as "tiktok" | "instagram" | "facebook" | "youtube",
+        { caption: caption ?? undefined, hashtags, ttsPath }
+      );
+
+      await unlink(inputPath).catch(() => {});
+      await unlink(tempVideoPath).catch(() => {});
+      await unlink(musicPath).catch(() => {});
+      if (ttsPath) await unlink(ttsPath).catch(() => {});
+    }
 
     return NextResponse.json({
       success: true,
