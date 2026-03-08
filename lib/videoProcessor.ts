@@ -205,19 +205,16 @@ export class VideoProcessor {
     let inputMaps: string[];
 
     if (ttsPath) {
-      // With TTS: duck music when voiceover plays, mix TTS + music
+      // With TTS: split TTS into two copies so it can be used for ducking AND mixing
       filterComplex = [
         `[0:v]scale=${specs.width}:${specs.height}:force_original_aspect_ratio=increase,crop=${specs.width}:${specs.height},trim=duration=${cappedVideoDuration},setpts=PTS-STARTPTS,fps=${specs.fps}[vscaled]`,
         `color=c=black:s=${specs.width}x${specs.height}:d=${outroSeconds}:r=${specs.fps}[outro]`,
         `[outro]${drawtext}[outro_text]`,
         `[vscaled][outro_text]concat=n=2:v=1:a=0[outv]`,
-        // TTS audio (trimmed and boosted)
-        `[2:a]atrim=0:${totalDuration},asetpts=PTS-STARTPTS,volume=1.3[tts]`,
-        // Music: trim to duration
+        `[2:a]atrim=0:${totalDuration},asetpts=PTS-STARTPTS,volume=1.3,asplit=2[tts_duck][tts_mix]`,
         `[1:a]atrim=0:${totalDuration},asetpts=PTS-STARTPTS[music]`,
-        // Duck music when TTS plays, then mix
-        `[music][tts]sidechaincompress=threshold=0.03:ratio=4:attack=200:release=1000[music_ducked]`,
-        `[music_ducked][tts]amix=inputs=2:duration=longest:weights=0.4 1.5[a]`,
+        `[music][tts_duck]sidechaincompress=threshold=0.03:ratio=4:attack=200:release=1000[music_ducked]`,
+        `[music_ducked][tts_mix]amix=inputs=2:duration=longest:weights=0.4 1.5[a]`,
       ];
       inputMaps = ['-map', '[outv]', '-map', '[a]'];
     } else {
@@ -291,6 +288,14 @@ export class VideoProcessor {
         resolve(metadata);
       });
     });
+  }
+
+  /**
+   * Get duration of an audio file in seconds
+   */
+  static async getAudioDuration(filePath: string): Promise<number> {
+    const metadata = await this.getVideoInfo(filePath);
+    return metadata?.format?.duration ?? 0;
   }
 
   /**

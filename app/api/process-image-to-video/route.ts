@@ -56,11 +56,30 @@ export async function POST(request: NextRequest) {
     const buffer = Buffer.from(await file.arrayBuffer());
     await writeFile(inputPath, buffer);
 
-    // Convert image to video first
-    const tempVideoFilename = `temp_video_${Date.now()}.mp4`;
-    const tempVideoPath = path.join(uploadsDir, tempVideoFilename);
+    // Generate TTS FIRST if enabled, so we can use its duration for the video
+    let ttsPath: string | undefined;
+    let ttsDuration = 0;
+    if (enableVoiceover === "true" && caption) {
+      const ttsText = voiceoverIncludeHashtags === "true" 
+        ? `${caption}. ${hashtags.join(', ')}`
+        : caption;
+      
+      const voice = voiceGender === "male" ? "onyx" : "nova";
+      
+      const ttsResponse = await fetch(`${request.nextUrl.origin}/api/generate-tts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: ttsText, voice }),
+      });
 
-    // Platform-specific durations
+      if (ttsResponse.ok) {
+        const ttsData = await ttsResponse.json();
+        ttsPath = ttsData.audioPath;
+        ttsDuration = await VideoProcessor.getAudioDuration(ttsPath);
+      }
+    }
+
+    // Determine video duration: match TTS length when voiceover is on, else platform default
     const platformDurations: Record<string, number> = {
       tiktok: 21,
       instagram: 45,
@@ -68,7 +87,13 @@ export async function POST(request: NextRequest) {
       youtube: 45,
     };
 
-    const duration = platformDurations[platform] || 30;
+    const duration = ttsDuration > 0
+      ? Math.ceil(ttsDuration) + 1
+      : platformDurations[platform] || 30;
+
+    // Convert image to video
+    const tempVideoFilename = `temp_video_${Date.now()}.mp4`;
+    const tempVideoPath = path.join(uploadsDir, tempVideoFilename);
 
     await VideoProcessor.imageToVideo({
       imagePath: inputPath,
@@ -104,6 +129,7 @@ export async function POST(request: NextRequest) {
     if (!musicResponse.ok) {
       await unlink(inputPath).catch(() => {});
       await unlink(tempVideoPath).catch(() => {});
+      if (ttsPath) await unlink(ttsPath).catch(() => {});
       return NextResponse.json(
         { error: `Failed to download music (HTTP ${musicResponse.status})` },
         { status: 500 }
@@ -114,28 +140,7 @@ export async function POST(request: NextRequest) {
     const musicPath = path.join(uploadsDir, `music_${Date.now()}.mp3`);
     await writeFile(musicPath, musicBuffer);
 
-    // Generate TTS if enabled
-    let ttsPath: string | undefined;
-    if (enableVoiceover === "true" && caption) {
-      const ttsText = voiceoverIncludeHashtags === "true" 
-        ? `${caption}. ${hashtags.join(', ')}`
-        : caption;
-      
-      const voice = voiceGender === "male" ? "onyx" : "nova";
-      
-      const ttsResponse = await fetch(`${request.nextUrl.origin}/api/generate-tts`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: ttsText, voice }),
-      });
-
-      if (ttsResponse.ok) {
-        const ttsData = await ttsResponse.json();
-        ttsPath = ttsData.audioPath;
-      }
-    }
-
-    // Process video with music
+    // Process video with music (and TTS if available)
     const outputFilename = `${platform}_${Date.now()}.mp4`;
     const outputPath = path.join(generatedDir, outputFilename);
 
