@@ -3,6 +3,10 @@ import OpenAI from "openai";
 import type { GeneratedContent } from "@/types";
 import { TrendResearcher } from "@/lib/trendResearcher";
 
+// Increase timeout for this route (OpenAI can take 15-20s)
+export const maxDuration = 60; // 60 seconds
+export const dynamic = 'force-dynamic';
+
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
@@ -111,6 +115,7 @@ CRITICAL:
       },
     ],
     temperature: 0.9,
+    max_tokens: 2500, // Optimize response time
     response_format: { type: "json_object" },
   });
 

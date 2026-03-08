@@ -39,6 +39,7 @@ export default function ContentGenerator({ files }: ContentGeneratorProps) {
       }
 
       const data: GeneratedContent = await response.json();
+      console.log("Generated content received:", data);
       setGeneratedContent(data);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Something went wrong";
